@@ -1,0 +1,318 @@
+{
+  "info": {
+    "name": "Chicking CMS API",
+    "_postman_id": "c0a6d0f0-4ef7-4f04-9d50-4fb9387e5601",
+    "description": "Import this collection into Apidog or Postman to test admin auth, OTP reset, blog CRUD, and blog comments.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "blogId",
+      "value": "blog-001"
+    },
+    {
+      "key": "commentId",
+      "value": "cmt-001"
+    },
+    {
+      "key": "adminEmail",
+      "value": "admin@chicking.com"
+    },
+    {
+      "key": "adminPassword",
+      "value": "Admin@123"
+    },
+    {
+      "key": "resetToken",
+      "value": ""
+    },
+    {
+      "key": "otp",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Admin Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/forgot-password"
+          }
+        },
+        {
+          "name": "Verify OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"otp\": \"{{otp}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/verify-otp"
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resetToken\": \"{{resetToken}}\",\n  \"newPassword\": \"NewAdmin@123\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/reset-password"
+          }
+        },
+        {
+          "name": "Current Admin",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/me"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin Blogs",
+      "item": [
+        {
+          "name": "Create Blog",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"author\": \"Robert Pattinson\",\n  \"authorRole\": \"Super Admin\",\n  \"category\": \"New Store Openings\",\n  \"content\": \"Full blog content goes here.\",\n  \"excerpt\": \"Courtesy: https://expressnews.asia/2026/01/with-21-store-acquisition-and-new-flagship-\",\n  \"image\": \"https://example.com/blog-cover.jpg\",\n  \"isVideo\": true,\n  \"publishedAt\": \"Apr 20, 2026 10:30 AM\",\n  \"readTime\": \"2 min Read\",\n  \"status\": \"Published\",\n  \"title\": \"with 21-Store Acquisition and New Flagship, Grace Food Courts Cements....\",\n  \"url\": \"https://www.youtube.com/watch?v=e5_L-d3M0aw\",\n  \"views\": 135\n}"
+            },
+            "url": "{{baseUrl}}/admin/blogs/"
+          }
+        },
+        {
+          "name": "List Admin Blogs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/admin/blogs/"
+          }
+        },
+        {
+          "name": "Get Admin Blog",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/admin/blogs/{{blogId}}"
+          }
+        },
+        {
+          "name": "Update Blog",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Draft\",\n  \"title\": \"Updated Blog Title\",\n  \"views\": 150\n}"
+            },
+            "url": "{{baseUrl}}/admin/blogs/{{blogId}}"
+          }
+        },
+        {
+          "name": "Delete Blog",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/admin/blogs/{{blogId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Public Blogs",
+      "item": [
+        {
+          "name": "List Public Blogs",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/blogs"
+          }
+        },
+        {
+          "name": "Get Public Blog",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/blogs/{{blogId}}"
+          }
+        },
+        {
+          "name": "List Categories",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/categories"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Comments",
+      "item": [
+        {
+          "name": "Add Public Comment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jane Doe\",\n  \"email\": \"jane@example.com\",\n  \"message\": \"Great update on the new store opening.\"\n}"
+            },
+            "url": "{{baseUrl}}/blogs/{{blogId}}/comments"
+          }
+        },
+        {
+          "name": "List Public Comments",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/blogs/{{blogId}}/comments"
+          }
+        },
+        {
+          "name": "List Admin Comments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/admin/blogs/{{blogId}}/comments"
+          }
+        },
+        {
+          "name": "Approve Comment",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Approved\"\n}"
+            },
+            "url": "{{baseUrl}}/admin/blogs/{{blogId}}/comments/{{commentId}}"
+          }
+        },
+        {
+          "name": "Delete Comment",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/admin/blogs/{{blogId}}/comments/{{commentId}}"
+          }
+        }
+      ]
+    }
+  ]
+}
