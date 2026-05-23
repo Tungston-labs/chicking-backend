@@ -11,6 +11,7 @@ from app.constants.blog_defaults import (
     normalize_read_time,
     normalize_text_content,
 )
+from app.utils.upload import build_public_asset_url
 
 
 def format_date(value: datetime | None) -> str:
@@ -29,21 +30,24 @@ def serialize_blog(
     blog: dict[str, Any],
     comments_count: int = 0,
     pending_comments: int = 0,
+    include_content: bool = True,
 ) -> dict[str, Any]:
     published_at = blog.get("published_at")
     fallback_date = published_at or blog.get("created_at")
     blog_id = str(blog.get("id") or blog.get("_id") or "")
     title = str(blog.get("title") or "").strip() or DEFAULT_BLOG_TITLE
+    excerpt = build_excerpt(blog)
+    content = normalize_text_content(blog.get("content")) if include_content else excerpt
 
     return {
         "id": blog_id,
         "title": title,
-        "excerpt": build_excerpt(blog),
-        "content": normalize_text_content(blog.get("content")),
+        "excerpt": excerpt,
+        "content": content,
         "author": str(blog.get("author") or "").strip() or DEFAULT_AUTHOR,
         "authorRole": str(blog.get("author_role") or "").strip() or DEFAULT_AUTHOR_ROLE,
         "category": normalize_category(blog.get("category")),
-        "image": blog.get("image"),
+        "image": build_public_asset_url(blog.get("image")),
         "isVideo": blog.get("is_video", False),
         "url": blog.get("url"),
         "slug": str(blog.get("slug") or "").strip(),

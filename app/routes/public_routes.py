@@ -12,8 +12,13 @@ router = APIRouter(tags=["Public Blogs"])
 
 
 @router.get("/blogs")
-async def public_blogs(category: str | None = Query(default=None)):
-    return await list_public_blogs(category)
+async def public_blogs(
+    category: str | None = Query(default=None),
+    page: int | None = Query(default=None, ge=1),
+    page_size: int | None = Query(default=None, ge=1, le=100),
+    include_content: bool = Query(default=False),
+):
+    return await list_public_blogs(category, page, page_size, include_content)
 
 
 @router.get("/blogs/{blog_id}")

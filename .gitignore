@@ -7,5 +7,6 @@ __pycache__/
 *.log
 staticfiles/
 media/
+uploads/
 .vscode/
-.idea/
+.idea/  

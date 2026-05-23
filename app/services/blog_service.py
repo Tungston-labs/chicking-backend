@@ -10,6 +10,27 @@ from app.models.blog_model import serialize_blog, serialize_comment
 from app.models.category_model import serialize_category
 from app.schemas.blog_schema import BlogStatus, CommentStatus
 from app.utils.slug import slugify
+from app.utils.upload import store_blog_image
+
+
+PUBLIC_BLOG_LIST_PROJECTION = {
+    "id": 1,
+    "title": 1,
+    "excerpt": 1,
+    "author": 1,
+    "author_role": 1,
+    "category": 1,
+    "image": 1,
+    "is_video": 1,
+    "url": 1,
+    "slug": 1,
+    "status": 1,
+    "published_at": 1,
+    "read_time": 1,
+    "views": 1,
+    "created_at": 1,
+    "updated_at": 1,
+}
 
 
 def _utc_now() -> datetime:
@@ -106,6 +127,8 @@ async def create_blog(blog: Any) -> dict[str, Any]:
         "created_at": now,
         "updated_at": now,
     }
+    if "image" in blog_payload:
+        blog_payload["image"] = store_blog_image(blog_payload.get("image"), blog_id)
 
     await db.blogs.insert_one(blog_payload)
 
@@ -193,6 +216,8 @@ async def update_blog(blog_id: str, payload: Any) -> dict[str, Any]:
     now = _utc_now()
     if "title" in update_data and update_data["title"]:
         update_data["slug"] = await _generate_unique_slug(update_data["title"], exclude_blog_id=blog_id)
+    if "image" in update_data:
+        update_data["image"] = store_blog_image(update_data.get("image"), blog_id)
     if "status" in update_data and update_data["status"] is not None:
         update_data["status"] = update_data["status"].value
         if update_data["status"] == BlogStatus.PUBLISHED.value and not update_data.get("published_at"):
@@ -224,18 +249,63 @@ async def delete_blog(blog_id: str) -> dict[str, str]:
     return {"message": "Blog deleted successfully"}
 
 
-async def list_public_blogs(category: str | None = None) -> list[dict[str, Any]]:
+async def list_public_blogs(
+    category: str | None = None,
+    page: int | None = None,
+    page_size: int | None = None,
+    include_content: bool = False,
+) -> list[dict[str, Any]] | dict[str, Any]:
     query: dict[str, Any] = {"status": BlogStatus.PUBLISHED.value}
     if category:
         query["category"] = category
 
-    blogs = await db.blogs.find(query).sort("published_at", -1).to_list(length=None)
+    projection = dict(PUBLIC_BLOG_LIST_PROJECTION)
+    if include_content:
+        projection["content"] = 1
+
+    use_pagination = page is not None or page_size is not None
+    cursor = db.blogs.find(query, projection).sort("published_at", -1)
+    total_blogs = await db.blogs.count_documents(query) if use_pagination else None
+
+    if use_pagination:
+        resolved_page = max(page or 1, 1)
+        resolved_page_size = _normalize_page_size(page_size)
+        blogs = await cursor.skip((resolved_page - 1) * resolved_page_size).limit(resolved_page_size).to_list(
+            length=resolved_page_size
+        )
+    else:
+        resolved_page = None
+        resolved_page_size = None
+        blogs = await cursor.to_list(length=None)
+
     ids = [str(blog.get("id")) for blog in blogs if blog.get("id")]
     comment_counts = await _comment_counts(ids, status_filter=CommentStatus.APPROVED.value)
-    return [
-        serialize_blog(blog, comments_count=comment_counts.get(str(blog.get("id") or ""), 0))
+
+    items = [
+        serialize_blog(
+            blog,
+            comments_count=comment_counts.get(str(blog.get("id") or ""), 0),
+            include_content=include_content,
+        )
         for blog in blogs
     ]
+
+    if not use_pagination:
+        return items
+
+    total_items = total_blogs or 0
+    total_pages = ceil(total_items / resolved_page_size) if total_items else 0
+    return {
+        "items": items,
+        "pagination": {
+            "page": resolved_page,
+            "pageSize": resolved_page_size,
+            "totalItems": total_items,
+            "totalPages": total_pages,
+            "hasNext": resolved_page < total_pages,
+            "hasPrevious": resolved_page > 1,
+        },
+    }
 
 
 async def get_public_blog(blog_id: str) -> dict[str, Any]:
