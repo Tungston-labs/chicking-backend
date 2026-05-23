@@ -1,13 +1,11 @@
 import os
 from functools import lru_cache
-from pathlib import Path
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
 
 load_dotenv()
-BASE_DIR = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseModel):
@@ -29,9 +27,6 @@ class Settings(BaseModel):
     smtp_timeout_seconds: int = Field(default=30, alias="EMAIL_TIMEOUT_SECONDS")
     email_from: str | None = Field(default=None, alias="EMAIL_FROM")
     email_from_name: str = Field(default="Chicking CMS", alias="EMAIL_FROM_NAME")
-    public_base_url: str = Field(default="http://178.248.112.5", alias="PUBLIC_BASE_URL")
-    uploads_dir: str = Field(default=str(BASE_DIR / "uploads"), alias="UPLOADS_DIR")
-    uploads_url_prefix: str = Field(default="/uploads", alias="UPLOADS_URL_PREFIX")
 
 
 @lru_cache

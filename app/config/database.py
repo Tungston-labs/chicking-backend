@@ -3,7 +3,7 @@ from typing import Any
 
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
-from pymongo import ASCENDING, DESCENDING
+from pymongo import ASCENDING
 
 from app.constants.blog_defaults import (
     DEFAULT_AUTHOR,
@@ -15,7 +15,6 @@ from app.constants.blog_defaults import (
 )
 from app.config.settings import get_settings
 from app.utils.slug import slugify
-from app.utils.upload import store_blog_image
 
 
 load_dotenv()
@@ -124,10 +123,6 @@ async def _normalize_existing_blogs() -> None:
             updates["read_time"] = DEFAULT_READ_TIME
         elif normalize_read_time(blog.get("read_time")) != blog.get("read_time"):
             updates["read_time"] = normalize_read_time(blog.get("read_time"))
-        if isinstance(blog.get("image"), str):
-            normalized_image = store_blog_image(blog.get("image"), updates.get("id") or blog.get("id"))
-            if normalized_image != blog.get("image"):
-                updates["image"] = normalized_image
         if "is_video" not in blog:
             updates["is_video"] = False
         if "excerpt" not in blog or not str(blog.get("excerpt") or "").strip():
@@ -250,16 +245,6 @@ async def ensure_indexes() -> None:
     await _ensure_index("blogs", "category", "category_1")
     await _ensure_index("blogs", "published_at", "published_at_1")
     await _ensure_index(
-        "blogs",
-        [("status", ASCENDING), ("published_at", DESCENDING)],
-        "status_1_published_at_-1",
-    )
-    await _ensure_index(
-        "blogs",
-        [("status", ASCENDING), ("category", ASCENDING), ("published_at", DESCENDING)],
-        "status_1_category_1_published_at_-1",
-    )
-    await _ensure_index(
         "comments",
         "id",
         "id_1",
@@ -268,11 +253,6 @@ async def ensure_indexes() -> None:
     )
     await _ensure_index("comments", [("blog_id", ASCENDING), ("created_at", ASCENDING)], "blog_id_1_created_at_1")
     await _ensure_index("comments", "status", "status_1")
-    await _ensure_index(
-        "comments",
-        [("blog_id", ASCENDING), ("status", ASCENDING)],
-        "blog_id_1_status_1",
-    )
     await _ensure_index("password_reset_otps", "email", "email_1")
     await _ensure_index(
         "password_reset_otps",

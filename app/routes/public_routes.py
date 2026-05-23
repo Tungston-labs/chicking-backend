@@ -1,36 +1,75 @@
-from fastapi import APIRouter, Query
+from datetime import datetime
+from typing import Any
+from fastapi import APIRouter
 
-from app.schemas.blog_schema import PublicCommentCreateSchema
-from app.services.blog_service import (
-    create_public_comment,
-    get_public_blog,
-    list_public_blogs,
-    list_public_comments,
+from app.constants.blog_defaults import (
+    DEFAULT_AUTHOR,
+    DEFAULT_AUTHOR_ROLE,
+    DEFAULT_BLOG_STATUS,
+    DEFAULT_BLOG_TITLE,
+    build_excerpt,
+    normalize_category,
+    normalize_read_time,
+    normalize_text_content,
 )
+router = APIRouter(prefix="/public", tags=["Public"])
 
-router = APIRouter(tags=["Public Blogs"])
-
-
-@router.get("/blogs")
-async def public_blogs(
-    category: str | None = Query(default=None),
-    page: int | None = Query(default=None, ge=1),
-    page_size: int | None = Query(default=None, ge=1, le=100),
-    include_content: bool = Query(default=False),
-):
-    return await list_public_blogs(category, page, page_size, include_content)
+def format_date(value: datetime | None) -> str:
+    if value is None:
+        return "---"
+    return value.strftime("%b %d, %Y")
 
 
-@router.get("/blogs/{blog_id}")
-async def public_blog_detail(blog_id: str):
-    return await get_public_blog(blog_id)
+def format_datetime(value: datetime | None) -> str:
+    if value is None:
+        return "---"
+    return value.strftime("%b %d, %Y %I:%M %p")
 
 
-@router.post("/blogs/{blog_id}/comments")
-async def add_blog_comment(blog_id: str, payload: PublicCommentCreateSchema):
-    return await create_public_comment(blog_id, payload)
+def serialize_blog(
+    blog: dict[str, Any],
+    comments_count: int = 0,
+    pending_comments: int = 0,
+) -> dict[str, Any]:
+    published_at = blog.get("published_at")
+    fallback_date = published_at or blog.get("created_at")
+    blog_id = str(blog.get("id") or blog.get("_id") or "")
+    title = str(blog.get("title") or "").strip() or DEFAULT_BLOG_TITLE
+
+    return {
+        "id": blog_id,
+        "title": title,
+        "excerpt": build_excerpt(blog),
+        "content": normalize_text_content(blog.get("content")),
+        "author": str(blog.get("author") or "").strip() or DEFAULT_AUTHOR,
+        "authorRole": str(blog.get("author_role") or "").strip() or DEFAULT_AUTHOR_ROLE,
+        "category": normalize_category(blog.get("category")),
+        "image": blog.get("image"),
+        "isVideo": blog.get("is_video", False),
+        "url": blog.get("url"),
+        "slug": str(blog.get("slug") or "").strip(),
+        "status": str(blog.get("status") or "").strip() or DEFAULT_BLOG_STATUS,
+        "date": format_date(fallback_date),
+        "publishedAt": format_datetime(published_at),
+        "readTime": normalize_read_time(blog.get("read_time")),
+        "views": blog.get("views", 0),
+        "comments": comments_count,
+        "pendingComments": pending_comments,
+        "createdAt": blog.get("created_at").isoformat() if blog.get("created_at") else None,
+        "updatedAt": blog.get("updated_at").isoformat() if blog.get("updated_at") else None,
+    }
 
 
-@router.get("/blogs/{blog_id}/comments")
-async def get_public_blog_comments(blog_id: str):
-    return await list_public_comments(blog_id)
+def serialize_comment(comment: dict[str, Any], include_email: bool = False) -> dict[str, Any]:
+    payload = {
+        "id": comment["id"],
+        "blogId": comment["blog_id"],
+        "name": comment["name"],
+        "message": comment["message"],
+        "status": comment["status"],
+        "createdAt": comment["created_at"].isoformat(),
+        "updatedAt": comment["updated_at"].isoformat(),
+    }
+    if include_email:
+        payload["email"] = comment["email"]
+    return payload
