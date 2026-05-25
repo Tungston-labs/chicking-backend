@@ -1,7 +1,12 @@
 from fastapi import APIRouter, Depends, Query
 
 from app.middleware.jwt_auth import get_current_admin
-from app.schemas.blog_schema import BlogCreateSchema, BlogUpdateSchema, CommentModerationSchema
+from app.schemas.blog_schema import (
+    BlogCreateSchema,
+    BlogUpdateSchema,
+    CommentModerationSchema,
+    CommentReplySchema,
+)
 from app.services.blog_service import (
     create_blog,
     delete_blog,
@@ -10,6 +15,7 @@ from app.services.blog_service import (
     list_admin_blogs,
     list_admin_comments,
     moderate_comment,
+    reply_to_comment,
     update_blog,
 )
 
@@ -70,6 +76,16 @@ async def update_comment_status(
     admin: dict = Depends(get_current_admin),
 ):
     return await moderate_comment(blog_id, comment_id, payload)
+
+
+@router.patch("/{blog_id}/comments/{comment_id}/reply")
+async def reply_blog_comment(
+    blog_id: str,
+    comment_id: str,
+    payload: CommentReplySchema,
+    admin: dict = Depends(get_current_admin),
+):
+    return await reply_to_comment(blog_id, comment_id, payload, admin)
 
 
 @router.delete("/{blog_id}/comments/{comment_id}")

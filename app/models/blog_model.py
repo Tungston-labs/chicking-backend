@@ -26,6 +26,30 @@ def format_datetime(value: datetime | None) -> str:
     return value.strftime("%b %d, %Y %I:%M %p")
 
 
+def serialize_comment_reply(
+    reply: dict[str, Any] | None,
+    include_admin_email: bool = False,
+) -> dict[str, Any] | None:
+    if not isinstance(reply, dict):
+        return None
+
+    message = str(reply.get("message") or "").strip()
+    if not message:
+        return None
+
+    created_at = reply.get("created_at")
+    updated_at = reply.get("updated_at")
+    payload = {
+        "message": message,
+        "adminName": str(reply.get("admin_name") or "").strip() or DEFAULT_AUTHOR,
+        "createdAt": created_at.isoformat() if created_at else None,
+        "updatedAt": updated_at.isoformat() if updated_at else None,
+    }
+    if include_admin_email and reply.get("admin_email"):
+        payload["adminEmail"] = reply["admin_email"]
+    return payload
+
+
 def serialize_blog(
     blog: dict[str, Any],
     comments_count: int = 0,
@@ -69,6 +93,7 @@ def serialize_comment(comment: dict[str, Any], include_email: bool = False) -> d
         "status": comment["status"],
         "createdAt": comment["created_at"].isoformat(),
         "updatedAt": comment["updated_at"].isoformat(),
+        "reply": serialize_comment_reply(comment.get("reply"), include_admin_email=include_email),
     }
     if include_email:
         payload["email"] = comment["email"]

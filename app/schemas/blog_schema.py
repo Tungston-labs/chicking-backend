@@ -175,7 +175,20 @@ class BlogUpdateSchema(BaseModel):
 class PublicCommentCreateSchema(BaseModel):
     name: str
     email: EmailStr
-    message: str = Field(min_length=3)
+    message: str = Field(
+        min_length=3,
+        validation_alias=AliasChoices("message", "comment"),
+    )
+
+    @field_validator("name", "message", mode="before")
+    @classmethod
+    def normalize_text_fields(cls, value: object) -> str:
+        if value is None:
+            raise ValueError("This field is required")
+        normalized = str(value).strip()
+        if not normalized:
+            raise ValueError("This field cannot be empty")
+        return normalized
 
     @field_validator("email")
     @classmethod
@@ -185,3 +198,21 @@ class PublicCommentCreateSchema(BaseModel):
 
 class CommentModerationSchema(BaseModel):
     status: CommentStatus
+
+
+class CommentReplySchema(BaseModel):
+    message: str = Field(
+        min_length=3,
+        validation_alias=AliasChoices("message", "comment"),
+    )
+    status: Optional[CommentStatus] = None
+
+    @field_validator("message", mode="before")
+    @classmethod
+    def normalize_message(cls, value: object) -> str:
+        if value is None:
+            raise ValueError("Reply message is required")
+        normalized = str(value).strip()
+        if not normalized:
+            raise ValueError("Reply message cannot be empty")
+        return normalized

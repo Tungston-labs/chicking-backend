@@ -360,6 +360,47 @@ async def moderate_comment(
     }
 
 
+async def reply_to_comment(
+    blog_id: str,
+    comment_id: str,
+    payload: Any,
+    admin: dict[str, Any],
+) -> dict[str, Any]:
+    await _ensure_blog_exists(blog_id)
+    comment = await db.comments.find_one({"blog_id": blog_id, "id": comment_id})
+    if not comment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Comment not found"
+        )
+
+    now = _utc_now()
+    existing_reply = comment.get("reply") if isinstance(comment.get("reply"), dict) else {}
+    reply_payload = {
+        "message": payload.message,
+        "admin_id": admin["id"],
+        "admin_name": admin["name"],
+        "admin_email": admin["email"],
+        "created_at": existing_reply.get("created_at") or now,
+        "updated_at": now,
+    }
+    update_fields: dict[str, Any] = {
+        "reply": reply_payload,
+        "updated_at": now,
+    }
+    if payload.status is not None:
+        update_fields["status"] = payload.status.value
+
+    updated = await db.comments.find_one_and_update(
+        {"blog_id": blog_id, "id": comment_id},
+        {"$set": update_fields},
+        return_document=ReturnDocument.AFTER,
+    )
+    return {
+        "message": "Comment reply saved successfully",
+        "comment": serialize_comment(updated, include_email=True),
+    }
+
+
 async def delete_comment(blog_id: str, comment_id: str) -> dict[str, str]:
     await _ensure_blog_exists(blog_id)
     result = await db.comments.delete_one({"blog_id": blog_id, "id": comment_id})
