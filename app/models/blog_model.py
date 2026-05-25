@@ -11,6 +11,7 @@ from app.constants.blog_defaults import (
     normalize_read_time,
     normalize_text_content,
 )
+from app.utils.upload import normalize_image_value
 
 
 def format_date(value: datetime | None) -> str:
@@ -43,7 +44,7 @@ def serialize_blog(
         "author": str(blog.get("author") or "").strip() or DEFAULT_AUTHOR,
         "authorRole": str(blog.get("author_role") or "").strip() or DEFAULT_AUTHOR_ROLE,
         "category": normalize_category(blog.get("category")),
-        "image": blog.get("image"),
+        "image": normalize_image_value(blog.get("image")),
         "isVideo": blog.get("is_video", False),
         "url": blog.get("url"),
         "slug": str(blog.get("slug") or "").strip(),

@@ -12,6 +12,7 @@ class Settings(BaseModel):
     app_name: str = "Chicking CMS API"
     mongo_url: str = Field(alias="MONGO_URL")
     database_name: str = Field(alias="DATABASE_NAME")
+    public_base_url: str = Field(default="http://178.248.112.5", alias="PUBLIC_BASE_URL")
     jwt_secret: str = Field(alias="JWT_SECRET")
     jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
     jwt_expire_minutes: int = Field(default=1440, alias="JWT_EXPIRE_MINUTES")

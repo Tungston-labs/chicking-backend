@@ -29,10 +29,10 @@ app.mount(
     name="uploads"
 )
 
-app.include_router(auth_router)
-app.include_router(blog_router)
-app.include_router(public_router)
-app.include_router(category_router)
+app.include_router(auth_router, prefix="/api")
+app.include_router(blog_router, prefix="/api")
+app.include_router(public_router, prefix="/api")
+app.include_router(category_router, prefix="/api")
 
 
 @app.on_event("startup")

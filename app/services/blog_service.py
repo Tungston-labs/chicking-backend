@@ -1,7 +1,7 @@
 from datetime import datetime
 from math import ceil
 from typing import Any
-from app.utils.upload import save_base64_image
+
 from fastapi import HTTPException, status
 from pymongo import ReturnDocument
 
@@ -10,6 +10,7 @@ from app.models.blog_model import serialize_blog, serialize_comment
 from app.models.category_model import serialize_category
 from app.schemas.blog_schema import BlogStatus, CommentStatus
 from app.utils.slug import slugify
+from app.utils.upload import normalize_image_value
 
 
 def _utc_now() -> datetime:
@@ -116,9 +117,9 @@ async def create_blog(blog: Any) -> dict[str, Any]:
     if status_value == BlogStatus.PUBLISHED.value and published_at is None:
         published_at = now
 
-    # Convert base64 image to URL BEFORE saving
+    # Normalize image values before saving so APIs always return URLs.
     if blog_dict.get("image"):
-        blog_dict["image"] = save_base64_image(blog_dict["image"])
+        blog_dict["image"] = normalize_image_value(blog_dict["image"])
 
     blog_payload = {
         **blog_dict,
@@ -236,9 +237,9 @@ async def update_blog(blog_id: str, payload: Any) -> dict[str, Any]:
         ):
             update_data["published_at"] = blog.get("published_at") or now
 
-    # Convert base64 image to URL BEFORE saving
+    # Normalize image values before saving so APIs always return URLs.
     if "image" in update_data and update_data["image"]:
-        update_data["image"] = save_base64_image(update_data["image"])
+        update_data["image"] = normalize_image_value(update_data["image"])
 
     update_data["updated_at"] = now
 

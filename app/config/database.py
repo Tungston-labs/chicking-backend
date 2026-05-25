@@ -15,6 +15,7 @@ from app.constants.blog_defaults import (
 )
 from app.config.settings import get_settings
 from app.utils.slug import slugify
+from app.utils.upload import normalize_image_value
 
 
 load_dotenv()
@@ -125,6 +126,10 @@ async def _normalize_existing_blogs() -> None:
             updates["read_time"] = normalize_read_time(blog.get("read_time"))
         if "is_video" not in blog:
             updates["is_video"] = False
+        image = blog.get("image")
+        normalized_image = normalize_image_value(image)
+        if normalized_image != image:
+            updates["image"] = normalized_image
         if "excerpt" not in blog or not str(blog.get("excerpt") or "").strip():
             updates["excerpt"] = build_excerpt(blog)
         if "updated_at" not in blog:
