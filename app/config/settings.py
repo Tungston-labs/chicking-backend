@@ -28,6 +28,7 @@ class Settings(BaseModel):
     smtp_timeout_seconds: int = Field(default=30, alias="EMAIL_TIMEOUT_SECONDS")
     email_from: str | None = Field(default=None, alias="EMAIL_FROM")
     email_from_name: str = Field(default="Chicking CMS", alias="EMAIL_FROM_NAME")
+    franchise_enquiry_recipient: str | None = Field(default=None, alias="FRANCHISE_ENQUIRY_RECIPIENT")
 
 
 @lru_cache
