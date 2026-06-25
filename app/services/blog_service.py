@@ -10,7 +10,7 @@ from app.models.blog_model import serialize_blog, serialize_comment
 from app.models.category_model import serialize_category
 from app.schemas.blog_schema import BlogStatus, CommentStatus
 from app.utils.slug import slugify
-from app.utils.upload import normalize_image_value
+from app.utils.upload import normalize_image_value, process_html_content_images
 
 
 def _utc_now() -> datetime:
@@ -120,6 +120,10 @@ async def create_blog(blog: Any) -> dict[str, Any]:
     # Normalize image values before saving so APIs always return URLs.
     if blog_dict.get("image"):
         blog_dict["image"] = normalize_image_value(blog_dict["image"])
+
+    # Process content to store base64 images as files
+    if blog_dict.get("content"):
+        blog_dict["content"] = process_html_content_images(blog_dict["content"])
 
     blog_payload = {
         **blog_dict,
@@ -240,6 +244,10 @@ async def update_blog(blog_id: str, payload: Any) -> dict[str, Any]:
     # Normalize image values before saving so APIs always return URLs.
     if "image" in update_data and update_data["image"]:
         update_data["image"] = normalize_image_value(update_data["image"])
+
+    # Process content to store base64 images as files
+    if "content" in update_data and update_data["content"]:
+        update_data["content"] = process_html_content_images(update_data["content"])
 
     update_data["updated_at"] = now
 

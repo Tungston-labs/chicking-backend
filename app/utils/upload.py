@@ -3,6 +3,7 @@
 
 import base64
 import os
+import re
 import uuid
 
 from app.config.settings import get_settings
@@ -48,6 +49,29 @@ def save_base64_image(image_data: str) -> str:
         file.write(base64.b64decode(encoded))
 
     return build_public_asset_url(f"/uploads/blogs/{filename}")
+
+
+def process_html_content_images(html_content: str) -> str:
+    """
+    Parses HTML content and replaces all base64 images with server URLs.
+    """
+    if not html_content or not isinstance(html_content, str):
+        return html_content
+
+    # Regex to find all img tags with base64 src
+    # This matches src="data:image/...;base64,..."
+    pattern = r'(<img\b[^>]*\bsrc=")(data:image/[^;]+;base64,[^"]+)(")'
+
+    def replace_base64(match):
+        prefix = match.group(1)
+        base64_data = match.group(2)
+        suffix = match.group(3)
+
+        # Use the existing save_base64_image function
+        new_url = save_base64_image(base64_data)
+        return f"{prefix}{new_url}{suffix}"
+
+    return re.sub(pattern, replace_base64, html_content)
 
 
 def normalize_image_value(image_data: str | None) -> str | None:
