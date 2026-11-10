@@ -21,7 +21,11 @@ from app.models.category_model import serialize_category
 from app.models.entities import Blog, Comment, Counter
 from app.schemas.blog_schema import BlogStatus, CommentStatus
 from app.utils.slug import slugify
-from app.utils.upload import normalize_image_value, process_html_content_images
+from app.utils.upload import (
+    normalize_html_content_images,
+    normalize_image_value,
+    process_html_content_images,
+)
 
 
 def _utc_now() -> datetime:
@@ -164,7 +168,7 @@ async def create_blog(blog: Any) -> dict[str, Any]:
 
         # Process content to store base64 images as files
         if blog_dict.get("content"):
-            blog_dict["content"] = process_html_content_images(blog_dict["content"])
+            blog_dict["content"] = normalize_html_content_images(blog_dict["content"])
 
         slug = await _generate_unique_slug(blog_dict.get("title", ""), session)
 
@@ -362,9 +366,9 @@ async def update_blog(blog_id: str, payload: Any) -> dict[str, Any]:
 
         # Process content to store base64 images as files
         if "content" in update_data and update_data["content"]:
-            blog.content = process_html_content_images(update_data["content"])
+            blog.content = normalize_html_content_images(update_data["content"])
         elif "content" in update_data:
-            blog.content = update_data["content"]
+            blog.content = normalize_html_content_images(update_data["content"])
 
         blog.updated_at = now
         await session.flush()

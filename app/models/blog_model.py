@@ -11,7 +11,7 @@ from app.constants.blog_defaults import (
     normalize_read_time,
     normalize_text_content,
 )
-from app.utils.upload import normalize_image_value
+from app.utils.upload import normalize_html_content_images, normalize_image_value
 
 
 def format_date(value: datetime | str | None) -> str:
@@ -83,7 +83,7 @@ def serialize_blog(
         "id": blog_id,
         "title": title,
         "excerpt": build_excerpt(blog_dict),
-        "content": normalize_text_content(blog_dict.get("content")),
+        "content": normalize_html_content_images(normalize_text_content(blog_dict.get("content"))),
         "author": str(blog_dict.get("author") or "").strip() or DEFAULT_AUTHOR,
         "authorRole": str(blog_dict.get("author_role") or "").strip() or DEFAULT_AUTHOR_ROLE,
         "category": normalize_category(blog_dict.get("category")),
