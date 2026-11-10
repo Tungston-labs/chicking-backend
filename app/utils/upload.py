@@ -86,21 +86,21 @@ def normalize_html_content_images(html_content: str | None) -> str | None:
     # First convert base64 images if any
     content = process_html_content_images(html_content)
 
-    # Rewrite any src=".../uploads/..." to use the active _public_base_url()
-    pattern = r'(<img\b[^>]*\bsrc=")([^"]*?/uploads/[^"]+)(")'
+    public_base = _public_base_url()
 
-    def replace_src(match):
-        prefix = match.group(1)
-        src = match.group(2)
-        suffix = match.group(3)
-        upload_idx = src.find("/uploads/")
-        if upload_idx != -1:
-            rel_path = src[upload_idx:]
-            new_src = f"{_public_base_url()}{rel_path}"
-            return f"{prefix}{new_src}{suffix}"
-        return match.group(0)
+    # Rewrite any http(s)://(localhost|127.0.0.1)(:port)/uploads/... to active public base URL
+    content = re.sub(
+        r"https?://(?:localhost|127\.0\.0\.1)(?::\d+)?/(uploads/[^\s\"'>]+)",
+        rf"{public_base}/\1",
+        content,
+        flags=re.IGNORECASE,
+    )
 
-    return re.sub(pattern, replace_src, content)
+    # Rewrite any src="/uploads/..." to use active public base URL
+    pattern = r'(?i)(<img\b[^>]*?\bsrc=["\']?)/(uploads/[^"\'\s>]+)(["\']?)'
+    content = re.sub(pattern, rf"\1{public_base}/\2\3", content)
+
+    return content
 
 
 def normalize_image_value(image_data: str | None) -> str | None:

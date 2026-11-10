@@ -10,3 +10,4 @@ python-multipart
 bcrypt
 pyjwt
 pydantic[email]
+a2wsgi
