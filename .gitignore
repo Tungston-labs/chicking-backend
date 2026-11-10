@@ -4,9 +4,11 @@ __pycache__/
 *.pyo
 *.pyd
 *.db
+*.sqlite
 *.log
 staticfiles/
 media/
 uploads/
 .vscode/
-.idea/  
+.idea/
+venv/

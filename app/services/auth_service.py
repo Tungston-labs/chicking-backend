@@ -1,18 +1,25 @@
+from datetime import datetime, timedelta
 import hashlib
 import secrets
-from datetime import datetime, timedelta
+from smtplib import SMTPException
 from typing import Any
 
 from fastapi import HTTPException, status
-from smtplib import SMTPException
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config.database import db
+from app.config.database import get_db_session
 from app.config.settings import get_settings
 from app.models.admin_model import serialize_admin
+from app.models.entities import Admin, PasswordResetOTP, RefreshToken
 from app.utils.email import send_password_reset_otp_email
 from app.utils.hash import hash_password, verify_password
-from app.utils.jwt import create_access_token, create_refresh_token, create_reset_token, decode_token
-
+from app.utils.jwt import (
+    create_access_token,
+    create_refresh_token,
+    create_reset_token,
+    decode_token,
+)
 
 settings = get_settings()
 
@@ -37,22 +44,26 @@ def _generate_otp() -> str:
     return str(secrets.randbelow(maximum - minimum + 1) + minimum)
 
 
-async def _store_refresh_token(admin: dict[str, Any], refresh_token: str, now: datetime) -> None:
+async def _store_refresh_token(
+    admin: dict[str, Any], refresh_token: str, now: datetime, session: AsyncSession
+) -> None:
     expires_at = now + timedelta(days=settings.refresh_token_expire_days)
-    await db.refresh_tokens.insert_one(
-        {
-            "token_hash": _hash_refresh_token(refresh_token),
-            "admin_id": admin["id"],
-            "email": admin["email"],
-            "expires_at": expires_at,
-            "created_at": now,
-            "updated_at": now,
-            "revoked_at": None,
-        }
+    token_entity = RefreshToken(
+        token_hash=_hash_refresh_token(refresh_token),
+        admin_id=admin["id"],
+        email=admin["email"],
+        expires_at=expires_at,
+        created_at=now,
+        updated_at=now,
+        revoked_at=None,
     )
+    session.add(token_entity)
+    await session.flush()
 
 
-async def _issue_auth_tokens(admin: dict[str, Any], now: datetime) -> dict[str, Any]:
+async def _issue_auth_tokens(
+    admin: dict[str, Any], now: datetime, session: AsyncSession
+) -> dict[str, Any]:
     token_payload = {
         "sub": admin["id"],
         "email": admin["email"],
@@ -60,7 +71,7 @@ async def _issue_auth_tokens(admin: dict[str, Any], now: datetime) -> dict[str, 
     }
     access_token = create_access_token(token_payload)
     refresh_token = create_refresh_token(token_payload)
-    await _store_refresh_token(admin, refresh_token, now)
+    await _store_refresh_token(admin, refresh_token, now, session)
     return {
         "accessToken": access_token,
         "refreshToken": refresh_token,
@@ -71,180 +82,204 @@ async def _issue_auth_tokens(admin: dict[str, Any], now: datetime) -> dict[str, 
 
 
 async def login_admin(credentials: Any) -> dict[str, Any]:
-    admin = await db.admins.find_one({"email": credentials.email, "is_active": True})
-    if not admin or not verify_password(credentials.password, admin["password_hash"]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
+    async with get_db_session() as session:
+        stmt = select(Admin).where(
+            Admin.email == credentials.email.lower(), Admin.is_active == True
         )
+        admin = (await session.execute(stmt)).scalar_one_or_none()
 
-    now = _utc_now()
-    await db.admins.update_one(
-        {"id": admin["id"]},
-        {"$set": {"last_login_at": now, "updated_at": now}},
-    )
-    admin["last_login_at"] = now
-    admin["updated_at"] = now
+        if not admin or not verify_password(credentials.password, admin.password_hash):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password",
+            )
 
-    tokens = await _issue_auth_tokens(admin, now)
+        now = _utc_now()
+        admin.last_login_at = now
+        admin.updated_at = now
+        await session.flush()
 
-    return {
-        "message": "Login successful",
-        **tokens,
-        "admin": serialize_admin(admin),
-    }
+        admin_dict = admin.to_dict()
+        tokens = await _issue_auth_tokens(admin_dict, now, session)
+
+        return {
+            "message": "Login successful",
+            **tokens,
+            "admin": serialize_admin(admin_dict),
+        }
 
 
 async def forgot_password(payload: Any) -> dict[str, Any]:
-    admin = await db.admins.find_one({"email": payload.email, "is_active": True})
+    email = payload.email.lower()
     success_message = {
         "message": "If the admin account exists, an OTP has been sent to the registered email address.",
     }
 
-    if not admin:
-        return success_message
+    async with get_db_session() as session:
+        stmt = select(Admin).where(Admin.email == email, Admin.is_active == True)
+        admin = (await session.execute(stmt)).scalar_one_or_none()
 
-    now = _utc_now()
-    otp = _generate_otp()
-    expires_at = now + timedelta(minutes=settings.otp_expire_minutes)
+        if not admin:
+            return success_message
 
-    await db.password_reset_otps.update_one(
-        {"email": payload.email},
-        {
-            "$set": {
-                "email": payload.email,
-                "admin_id": admin["id"],
-                "otp_hash": _hash_otp(payload.email, otp),
-                "expires_at": expires_at,
-                "updated_at": now,
-                "verified_at": None,
-                "used_at": None,
-            },
-            "$setOnInsert": {"created_at": now},
-        },
-        upsert=True,
-    )
+        now = _utc_now()
+        otp = _generate_otp()
+        expires_at = now + timedelta(minutes=settings.otp_expire_minutes)
 
-    try:
-        await send_password_reset_otp_email(payload.email, otp, settings.otp_expire_minutes)
-    except (RuntimeError, SMTPException, OSError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Unable to send OTP email at the moment. Please try again later.",
-        ) from exc
+        otp_stmt = select(PasswordResetOTP).where(PasswordResetOTP.email == email)
+        record = (await session.execute(otp_stmt)).scalar_one_or_none()
 
-    return {
-        **success_message,
-        "expiresInMinutes": settings.otp_expire_minutes,
-    }
+        if record:
+            record.admin_id = admin.id
+            record.otp_hash = _hash_otp(email, otp)
+            record.expires_at = expires_at
+            record.updated_at = now
+            record.verified_at = None
+            record.used_at = None
+        else:
+            record = PasswordResetOTP(
+                email=email,
+                admin_id=admin.id,
+                otp_hash=_hash_otp(email, otp),
+                expires_at=expires_at,
+                created_at=now,
+                updated_at=now,
+                verified_at=None,
+                used_at=None,
+            )
+            session.add(record)
+
+        await session.flush()
+
+        try:
+            await send_password_reset_otp_email(email, otp, settings.otp_expire_minutes)
+        except (RuntimeError, SMTPException, OSError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Unable to send OTP email at the moment. Please try again later.",
+            ) from exc
+
+        return {
+            **success_message,
+            "expiresInMinutes": settings.otp_expire_minutes,
+        }
 
 
 async def verify_reset_otp(payload: Any) -> dict[str, Any]:
-    record = await db.password_reset_otps.find_one({"email": payload.email})
-    if not record:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="OTP not found")
+    email = payload.email.lower()
+    async with get_db_session() as session:
+        stmt = select(PasswordResetOTP).where(PasswordResetOTP.email == email)
+        record = (await session.execute(stmt)).scalar_one_or_none()
 
-    now = _utc_now()
-    if record.get("used_at"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OTP already used")
-    if record["expires_at"] < now:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OTP has expired")
-    if record["otp_hash"] != _hash_otp(payload.email, payload.otp):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OTP")
+        if not record:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="OTP not found")
 
-    await db.password_reset_otps.update_one(
-        {"email": payload.email},
-        {"$set": {"verified_at": now, "updated_at": now}},
-    )
+        now = _utc_now()
+        if record.used_at:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OTP already used")
+        if record.expires_at < now:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OTP has expired")
+        if record.otp_hash != _hash_otp(email, payload.otp):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OTP")
 
-    reset_token = create_reset_token({"sub": record["admin_id"], "email": payload.email})
+        record.verified_at = now
+        record.updated_at = now
+        await session.flush()
 
-    return {
-        "message": "OTP verified successfully",
-        "resetToken": reset_token,
-    }
+        reset_token = create_reset_token({"sub": record.admin_id, "email": email})
+
+        return {
+            "message": "OTP verified successfully",
+            "resetToken": reset_token,
+        }
 
 
 async def reset_password(payload: Any) -> dict[str, Any]:
     token_payload = decode_token(payload.reset_token, expected_type="password_reset")
     admin_id = token_payload.get("sub")
-    email = token_payload.get("email")
+    email = (token_payload.get("email") or "").lower()
 
-    admin = await db.admins.find_one({"id": admin_id, "email": email, "is_active": True})
-    if not admin:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Admin not found")
+    async with get_db_session() as session:
+        admin_stmt = select(Admin).where(
+            Admin.id == admin_id, Admin.email == email, Admin.is_active == True
+        )
+        admin = (await session.execute(admin_stmt)).scalar_one_or_none()
+        if not admin:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Admin not found")
 
-    record = await db.password_reset_otps.find_one({"email": email})
-    if not record or not record.get("verified_at") or record.get("used_at"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="OTP verification is required before resetting the password",
+        otp_stmt = select(PasswordResetOTP).where(PasswordResetOTP.email == email)
+        record = (await session.execute(otp_stmt)).scalar_one_or_none()
+        if not record or not record.verified_at or record.used_at:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="OTP verification is required before resetting the password",
+            )
+
+        now = _utc_now()
+        admin.password_hash = hash_password(payload.new_password)
+        admin.updated_at = now
+
+        record.used_at = now
+        record.updated_at = now
+
+        await session.execute(
+            update(RefreshToken)
+            .where(RefreshToken.admin_id == admin_id, RefreshToken.revoked_at.is_(None))
+            .values(revoked_at=now, updated_at=now)
         )
 
-    now = _utc_now()
-    await db.admins.update_one(
-        {"id": admin_id},
-        {
-            "$set": {
-                "password_hash": hash_password(payload.new_password),
-                "updated_at": now,
-            }
-        },
-    )
-    await db.password_reset_otps.update_one(
-        {"email": email},
-        {"$set": {"used_at": now, "updated_at": now}},
-    )
-    await db.refresh_tokens.update_many(
-        {"admin_id": admin_id, "revoked_at": None},
-        {"$set": {"revoked_at": now, "updated_at": now}},
-    )
-
-    return {
-        "message": "Password reset successful",
-    }
+        return {
+            "message": "Password reset successful",
+        }
 
 
 async def refresh_access_token(payload: Any) -> dict[str, Any]:
     refresh_token = payload.refresh_token
     token_payload = decode_token(refresh_token, expected_type="refresh")
     token_hash = _hash_refresh_token(refresh_token)
-    record = await db.refresh_tokens.find_one({"token_hash": token_hash})
 
-    if not record:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token not found",
+    async with get_db_session() as session:
+        stmt = select(RefreshToken).where(RefreshToken.token_hash == token_hash)
+        record = (await session.execute(stmt)).scalar_one_or_none()
+
+        if not record:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token not found",
+            )
+
+        now = _utc_now()
+        if record.revoked_at:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token has been revoked",
+            )
+        if record.expires_at < now:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token has expired",
+            )
+
+        admin_id = token_payload.get("sub")
+        email = (token_payload.get("email") or "").lower()
+        admin_stmt = select(Admin).where(
+            Admin.id == admin_id, Admin.email == email, Admin.is_active == True
         )
+        admin = (await session.execute(admin_stmt)).scalar_one_or_none()
+        if not admin:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Admin account not found",
+            )
 
-    now = _utc_now()
-    if record.get("revoked_at"):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token has been revoked",
-        )
-    if record["expires_at"] < now:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token has expired",
-        )
+        record.revoked_at = now
+        record.updated_at = now
+        await session.flush()
 
-    admin_id = token_payload.get("sub")
-    email = token_payload.get("email")
-    admin = await db.admins.find_one({"id": admin_id, "email": email, "is_active": True})
-    if not admin:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Admin account not found",
-        )
+        admin_dict = admin.to_dict()
+        tokens = await _issue_auth_tokens(admin_dict, now, session)
 
-    await db.refresh_tokens.update_one(
-        {"token_hash": token_hash},
-        {"$set": {"revoked_at": now, "updated_at": now}},
-    )
-    tokens = await _issue_auth_tokens(admin, now)
-
-    return {
-        "message": "Token refreshed successfully",
-        **tokens,
-    }
+        return {
+            "message": "Token refreshed successfully",
+            **tokens,
+        }

@@ -1,8 +1,11 @@
 import argparse
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 
-from app.config.database import db, ensure_indexes
+from sqlalchemy import func, select
+
+from app.config.database import engine, ensure_indexes, get_db_session
+from app.models.entities import Admin
 from app.utils.hash import hash_password
 
 
@@ -21,38 +24,44 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 async def create_admin(args: argparse.Namespace) -> None:
-    await ensure_indexes()
-    now = datetime.utcnow()
-    email = args.email.lower()
+    try:
+        await ensure_indexes()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        email = args.email.lower()
 
-    existing = await db.admins.find_one({"email": email})
-    total_admins = await db.admins.count_documents({})
-    payload = {
-        "id": f"admin-{total_admins + 1:03d}" if not existing else existing["id"],
-        "name": args.name,
-        "email": email,
-        "password_hash": hash_password(args.password),
-        "role": args.role,
-        "is_active": True,
-        "updated_at": now,
-    }
+        async with get_db_session() as session:
+            stmt = select(Admin).where(Admin.email == email)
+            existing = (await session.execute(stmt)).scalar_one_or_none()
 
-    if existing:
-        if not args.force_update:
-            print("Admin already exists. Use --force-update to replace the password/details.")
-            return
+            if existing:
+                if not args.force_update:
+                    print("Admin already exists. Use --force-update to replace the password/details.")
+                    return
 
-        await db.admins.update_one(
-            {"email": email},
-            {"$set": payload},
-        )
-        print(f"Updated admin: {email}")
-        return
+                existing.name = args.name
+                existing.password_hash = hash_password(args.password)
+                existing.role = args.role
+                existing.is_active = True
+                existing.updated_at = now
+                print(f"Updated admin: {email}")
+                return
 
-    payload["created_at"] = now
-    payload["last_login_at"] = None
-    await db.admins.insert_one(payload)
-    print(f"Created admin: {email}")
+            total_admins = (await session.execute(select(func.count(Admin.id)))).scalar_one()
+            new_admin = Admin(
+                id=f"admin-{total_admins + 1:03d}",
+                name=args.name,
+                email=email,
+                password_hash=hash_password(args.password),
+                role=args.role,
+                is_active=True,
+                last_login_at=None,
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(new_admin)
+            print(f"Created admin: {email}")
+    finally:
+        await engine.dispose()
 
 
 if __name__ == "__main__":
