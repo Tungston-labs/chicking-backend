@@ -28,6 +28,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.app_name,
     lifespan=lifespan,
+    docs_url="/api/docs",
+    openapi_url="/api/openapi.json",
 )
 
 app.add_middleware(
@@ -54,4 +56,11 @@ app.include_router(category_router, prefix="/api")
 async def home():
     return {
         "message": "Chicking backend running"
+    }
+
+
+@app.get("/api")
+async def api_home():
+    return {
+        "message": "Chicking backend API running"
     }

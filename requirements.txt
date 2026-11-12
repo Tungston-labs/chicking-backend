@@ -3,7 +3,7 @@ uvicorn
 sqlalchemy>=2.0.0
 aiomysql>=0.2.0
 pymysql>=1.1.0
-greenlet
+greenlet<=3.2.5
 cryptography
 python-dotenv
 python-multipart
